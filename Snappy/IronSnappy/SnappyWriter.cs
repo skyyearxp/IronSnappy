@@ -17,6 +17,16 @@ namespace IronSnappy
       private const int InputMargin = 16 - 1;
       private const int MinNonLiteralBlockSize = 1 + 1 + InputMargin;
 
+      private const int TagLiteral = 0x00;
+      private const int TagCopy1 = 0x01;
+      private const int TagCopy2 = 0x02;
+      private const int TagCopy4 = 0x03;
+
+      private const int ChunkTypeCompressedData = 0x00;
+      private const int ChunkTypeUncompressedData = 0x01;
+      private const int ChunkTypePadding = 0xfe;
+      private const int ChunkTypeStreamIdentifier = 0xff;
+
       private static readonly int ObufHeaderLen = MagicChunk.Length + ChecksumSize + ChunkHeaderSize;
       private static readonly int ObufLen = ObufHeaderLen + MaxEncodedLenOfMaxBlockSize;
 
@@ -135,6 +145,36 @@ namespace IronSnappy
             // Compress the buffer, discarding the result if the improvement
             // isn't at least 12.5%.
             ReadOnlySpan<byte> compressed = Encode(_obuf.AsSpan()[ObufHeaderLen..], uncompressed);
+            byte chunkType = (byte)ChunkTypeCompressedData;
+            int chunkLen = 4 + compressed.Length;
+            int obufEnd = ObufHeaderLen + compressed.Length;
+
+            if(compressed.Length >= uncompressed.Length - uncompressed.Length / 8)
+            {
+               chunkType = ChunkTypeUncompressedData;
+
+               chunkLen = 4 + uncompressed.Length;
+
+               obufEnd = ObufHeaderLen;
+
+            }
+
+            // Fill in the per-chunk header that comes before the body.
+            _obuf[MagicChunk.Length + 0] = chunkType;
+            _obuf[MagicChunk.Length + 1] = (byte)(chunkLen >> 0);
+            _obuf[MagicChunk.Length + 2] = (byte)(chunkLen >> 8);
+            _obuf[MagicChunk.Length + 3] = (byte)(chunkLen >> 16);
+            _obuf[MagicChunk.Length + 4] = (byte)(checksum >> 0);
+            _obuf[MagicChunk.Length + 5] = (byte)(checksum >> 8);
+            _obuf[MagicChunk.Length + 6] = (byte)(checksum >> 16);
+            _obuf[MagicChunk.Length + 7] = (byte)(checksum >> 24);
+
+            _parent.Write(_obuf, obufStart, obufEnd);
+
+            if(chunkType == ChunkTypeUncompressedData)
+            {
+               _parent.Write(uncompressed);
+            }
          }
       }
 
@@ -166,11 +206,11 @@ namespace IronSnappy
 
             if(p.Length < MinNonLiteralBlockSize)
             {
-               //emitLiteral
+               d += EmitLiteral(dst[d..], p);
             }
             else
             {
-               //encodeBlock
+               d += EncodeBlock(dst[d..], p);
             }
          }
 
@@ -337,7 +377,7 @@ namespace IronSnappy
             // A 4-byte match has been found. We'll later see if more than 4 bytes
             // match. But, prior to the match, src[nextEmit:s] are unmatched. Emit
             // them as literal bytes.
-            d += emitLiteral(dst[d..], src[nextEmit..s]);
+            d += EmitLiteral(dst[d..], src[nextEmit..s]);
 
             // Call emitCopy, and then see if another emitCopy could be our next
             // move. Repeat until we find no match for the input immediately after
@@ -364,7 +404,7 @@ namespace IronSnappy
                   s = s + 1;
                }
 
-               d += emitCopy(dst[d..], base1 - candidate, s - base1);
+               d += EmitCopy(dst[d..], base1 - candidate, s - base1);
 
                nextEmit = s;
                if(s >= sLimit)
@@ -401,10 +441,106 @@ namespace IronSnappy
          emitRemainder:
          if(nextEmit < src.Length)
          {
-            d += emitLiteral(dst[d..], src[nextEmit..]);
+            d += EmitLiteral(dst[d..], src[nextEmit..]);
          }
          return d;
 
+      }
+
+      // emitCopy writes a copy chunk and returns the number of bytes written.
+      //
+      // It assumes that:
+      //	dst is long enough to hold the encoded bytes
+      //	1 <= offset && offset <= 65535
+      //	4 <= length && length <= 65535
+      static int EmitCopy(Span<byte> dst, int offset, int length)
+      {
+         int i = 0;
+
+         // The maximum length for a single tagCopy1 or tagCopy2 op is 64 bytes. The
+         // threshold for this loop is a little higher (at 68 = 64 + 4), and the
+         // length emitted down below is is a little lower (at 60 = 64 - 4), because
+         // it's shorter to encode a length 67 copy as a length 60 tagCopy2 followed
+         // by a length 7 tagCopy1 (which encodes as 3+2 bytes) than to encode it as
+         // a length 64 tagCopy2 followed by a length 3 tagCopy2 (which encodes as
+         // 3+3 bytes). The magic 4 in the 64±4 is because the minimum length for a
+         // tagCopy1 op is 4 bytes, which is why a length 3 copy has to be an
+         // encodes-as-3-bytes tagCopy2 instead of an encodes-as-2-bytes tagCopy1.
+         while(length >= 68)
+         {
+            // Emit a length 64 copy, encoded as 3 bytes.
+            dst[i + 0] = 63 << 2 | TagCopy2;
+            dst[i + 1] = (byte)offset;
+
+            dst[i + 2] = (byte)(offset >> 8);
+
+            i += 3;
+            length -= 64;
+         }
+
+         if(length > 64)
+         {
+            // Emit a length 60 copy, encoded as 3 bytes.
+            dst[i + 0] = 59 << 2 | TagCopy2;
+            dst[i + 1] = (byte)offset;
+
+            dst[i + 2] = (byte)(offset >> 8);
+
+            i += 3;
+            length -= 60;
+         }
+
+         if(length >= 12 || offset >= 2048)
+         {
+            // Emit the remaining copy, encoded as 3 bytes.
+            dst[i + 0] = (byte)((ushort)(length - 1) << 2 | TagCopy2);
+            dst[i + 1] = (byte)offset;
+
+            dst[i + 2] = (byte)(offset >> 8);
+            return i + 3;
+         }
+
+         // Emit the remaining copy, encoded as 2 bytes.
+         dst[i + 0] = (byte)((uint)(offset >> 8) << 5 | (uint)(length - 4) << 2 | TagCopy1);
+         dst[i + 1] = (byte)offset;
+         return i + 2;
+      }
+
+      // emitLiteral writes a literal chunk and returns the number of bytes written.
+      //
+      // It assumes that:
+      //	dst is long enough to hold the encoded bytes
+      //	1 <= len(lit) && len(lit) <= 65536
+      static int EmitLiteral(Span<byte> dst, ReadOnlySpan<byte> lit)
+      {
+         int i = 0;
+         int n = lit.Length - 1;
+
+         if(n < 60)
+         {
+            dst[0] = (byte)((n << 2) | TagLiteral);
+            i = 1;
+         }
+         else if(n < 1 << 8)
+         {
+
+            dst[0] = 60 << 2 | TagLiteral;
+
+            dst[1] = (byte)n;
+            i = 2;
+         }
+         else
+         {
+            dst[0] = 61 << 2 | TagLiteral;
+            dst[1] = (byte)n;
+
+            dst[2] = (byte)(n >> 8);
+
+            i = 3;
+         }
+
+         lit.CopyTo(dst[i..]);
+         return i + lit.Length;
       }
    }
 }

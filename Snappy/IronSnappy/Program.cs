@@ -1,5 +1,4 @@
-﻿using System;
-using System.IO;
+﻿using System.IO;
 
 namespace IronSnappy
 {
@@ -7,13 +6,15 @@ namespace IronSnappy
    {
       static void Main(string[] args)
       {
-         var ms = new MemoryStream();
-
-         using(Stream w = Snappy.OpenWriter(ms))
+         using(FileStream dest = File.Create("c:\\tmp\\sawyer.txt"))
          {
-            using(FileStream src = File.OpenRead("TestData/Mark.Twain-Tom.Sawyer.txt"))
+
+            using(Stream w = Snappy.OpenWriter(dest))
             {
-               src.CopyTo(w);
+               using(FileStream src = File.OpenRead("TestData/Mark.Twain-Tom.Sawyer.txt"))
+               {
+                  src.CopyTo(w);
+               }
             }
          }
       }

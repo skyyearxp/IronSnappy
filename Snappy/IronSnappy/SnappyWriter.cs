@@ -14,6 +14,8 @@ namespace IronSnappy
       private const int ChecksumSize = 4;
       private const int ChunkHeaderSize = 4;
       private const int MaxEncodedLenOfMaxBlockSize = 76490;
+      private const int InputMargin = 16 - 1;
+      private const int MinNonLiteralBlockSize = 1 + 1 + InputMargin;
 
       private static readonly int ObufHeaderLen = MagicChunk.Length + ChecksumSize + ChunkHeaderSize;
       private static readonly int ObufLen = ObufHeaderLen + MaxEncodedLenOfMaxBlockSize;
@@ -148,7 +150,31 @@ namespace IronSnappy
             throw new NotImplementedException();
          }
 
-         throw new NotImplementedException();
+         // The block starts with the varint-encoded length of the decompressed bytes.
+         int d = PutUvarint(dst, (ulong)src.Length);
+
+         while(src.Length > 0)
+         {
+            ReadOnlySpan<byte> p = src;
+            src = null;
+
+            if(p.Length > MaxBlockSize)
+            {
+               p = p[..MaxBlockSize];
+               src = p[MaxBlockSize..];
+            }
+
+            if(p.Length < MinNonLiteralBlockSize)
+            {
+               //emitLiteral
+            }
+            else
+            {
+               //encodeBlock
+            }
+         }
+
+         return dst[..d];
       }
 
       private static int GetMaxEncodedLen(int srcLen)
@@ -184,6 +210,201 @@ namespace IronSnappy
             return -1;
 	      }
          return (int)n;
+      }
+
+      // PutUvarint encodes a uint64 into buf and returns the number of bytes written.
+      // If the buffer is too small, PutUvarint will panic.
+      int PutUvarint(Span<byte> buf, ulong x)
+      {
+         int i = 0;
+         while(x >= 0x80)
+         {
+            buf[i] = (byte)((byte)x | 0x80);
+            x >>= 7;
+            i++;
+         }
+         buf[i] = (byte)x;
+         return i + 1;
+      }
+
+      static uint Load32(ReadOnlySpan<byte> b, int i)
+      {
+         b = b[i..(i + 4)]; // Help the compiler eliminate bounds checks on the next line.
+         return (uint)(b[0]) | ((uint)(b[1]) << 8) | ((uint)(b[2]) << 16) | ((uint)(b[3]) << 24);
+      }
+
+      static ulong Load64(ReadOnlySpan<byte> b, int i)
+      {
+         b = b[i..(i + 8)]; // Help the compiler eliminate bounds checks on the next line.
+         return (ulong)(b[0]) | (ulong)(b[1]) << 8 | (ulong)(b[2]) << 16 | (ulong)(b[3]) << 24 |
+            (ulong)(b[4]) << 32 | (ulong)(b[5]) << 40 | (ulong)(b[6]) << 48 | (ulong)(b[7]) << 56;
+      }
+
+      static uint Hash(uint u, int shift)
+      {
+         return (u * 0x1e35a7bd) >> shift;
+      }
+
+      // encodeBlock encodes a non-empty src to a guaranteed-large-enough dst. It
+      // assumes that the varint-encoded length of the decompressed bytes has already
+      // been written.
+      //
+      // It also assumes that:
+      //	len(dst) >= MaxEncodedLen(len(src)) &&
+      // 	minNonLiteralBlockSize <= len(src) && len(src) <= maxBlockSize
+      int EncodeBlock(Span<byte> dst, ReadOnlySpan<byte> src)
+      {
+         int d = 0;
+
+         // Initialize the hash table. Its size ranges from 1<<8 to 1<<14 inclusive.
+         // The table element type is uint16, as s < sLimit and sLimit < len(src)
+         // and len(src) <= maxBlockSize and maxBlockSize == 65536.
+         const int maxTableSize = 1 << 14;
+
+         // tableMask is redundant, but helps the compiler eliminate bounds
+         // checks.
+         const int tableMask = maxTableSize - 1;
+
+         int shift = 32 - 8;
+
+         for(int tableSize = 1 << 8; tableSize < maxTableSize && tableSize < src.Length; tableSize *= 2)
+         {
+            shift--;
+         }
+
+         // In Go, all array elements are zero-initialized, so there is no advantage
+         // to a smaller tableSize per se. However, it matches the C++ algorithm,
+         // and in the asm versions of this code, we can get away with zeroing only
+         // the first tableSize elements.
+         ushort[] table = new ushort[maxTableSize];
+
+         // sLimit is when to stop looking for offset/length copies. The inputMargin
+         // lets us use a fast path for emitLiteral in the main loop, while we are
+         // looking for copies.
+         int sLimit = src.Length - InputMargin;
+
+         // nextEmit is where in src the next emitLiteral should start from.
+         int nextEmit = 0;
+
+         // The encoded form must start with a literal, as there are no previous
+         // bytes to copy, so we start looking for hash matches at s == 1.
+         int s = 1;
+         uint nextHash = Hash(Load32(src, s), shift);
+
+         while(true)
+         {
+            // Copied from the C++ snappy implementation:
+            //
+            // Heuristic match skipping: If 32 bytes are scanned with no matches
+            // found, start looking only at every other byte. If 32 more bytes are
+            // scanned (or skipped), look at every third byte, etc.. When a match
+            // is found, immediately go back to looking at every byte. This is a
+            // small loss (~5% performance, ~0.1% density) for compressible data
+            // due to more bookkeeping, but for non-compressible data (such as
+            // JPEG) it's a huge win since the compressor quickly "realizes" the
+            // data is incompressible and doesn't bother looking for matches
+            // everywhere.
+            //
+            // The "skip" variable keeps track of how many bytes there are since
+            // the last match; dividing it by 32 (ie. right-shifting by five) gives
+            // the number of bytes to move ahead for each iteration.
+            int skip = 32;
+
+            int nextS = s;
+            int candidate = 0;
+
+            while(true)
+            {
+               s = nextS;
+               int bytesBetweenHashLookups = skip >> 5;
+               nextS = s + bytesBetweenHashLookups;
+               skip += bytesBetweenHashLookups;
+               if(nextS > sLimit)
+               {
+                  goto emitRemainder;
+               }
+               candidate = (int)(table[nextHash & tableMask]);
+               table[nextHash & tableMask] = (ushort)s;
+
+               nextHash = Hash(Load32(src, nextS), shift);
+               if(Load32(src, s) == Load32(src, candidate))
+               {
+                  break;
+
+               }
+            }
+
+            // A 4-byte match has been found. We'll later see if more than 4 bytes
+            // match. But, prior to the match, src[nextEmit:s] are unmatched. Emit
+            // them as literal bytes.
+            d += emitLiteral(dst[d..], src[nextEmit..s]);
+
+            // Call emitCopy, and then see if another emitCopy could be our next
+            // move. Repeat until we find no match for the input immediately after
+            // what was consumed by the last emitCopy call.
+            //
+            // If we exit this loop normally then we need to call emitLiteral next,
+            // though we don't yet know how big the literal will be. We handle that
+            // by proceeding to the next iteration of the main loop. We also can
+            // exit this loop via goto if we get close to exhausting the input.
+            while(true)
+            {
+               // Invariant: we have a 4-byte match at s, and no need to emit any
+               // literal bytes prior to s.
+               int base1 = s;
+
+               // Extend the 4-byte match as long as possible.
+               //
+               // This is an inlined version of:
+               //	s = extendMatch(src, candidate+4, s+4)
+               s += 4;
+               for(int i = candidate + 4; s < src.Length && src[i] == src[s];)
+               {
+                  i = i + 1;
+                  s = s + 1;
+               }
+
+               d += emitCopy(dst[d..], base1 - candidate, s - base1);
+
+               nextEmit = s;
+               if(s >= sLimit)
+               {
+                  goto emitRemainder;
+               }
+
+               // We could immediately start working at s now, but to improve
+               // compression we first update the hash table at s-1 and at s. If
+               // another emitCopy is not our next move, also calculate nextHash
+               // at s+1. At least on GOARCH=amd64, these three hash calculations
+               // are faster as one load64 call (with some shifts) instead of
+               // three load32 calls.
+               ulong x = Load64(src, s - 1);
+
+               uint prevHash = Hash((uint)(x >> 0), shift);
+               table[prevHash & tableMask] = (ushort)(s - 1);
+
+               uint currHash = Hash((uint)(x >> 8), shift);
+               candidate = (int)(table[currHash & tableMask]);
+               table[currHash & tableMask] = (ushort)(s);
+               if((uint)(x >> 8) != Load32(src, candidate))
+               {
+                  nextHash = Hash((uint)(x >> 16), shift);
+
+                  s++;
+
+                  break;
+
+               }
+            }
+         }
+
+         emitRemainder:
+         if(nextEmit < src.Length)
+         {
+            d += emitLiteral(dst[d..], src[nextEmit..]);
+         }
+         return d;
+
       }
    }
 }

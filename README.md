@@ -12,7 +12,7 @@ Internally, it is using array pooling and spans for efficient memory allocation 
 
 ## Using
 
-Reference the following NuGet package ![Nuget](https://img.shields.io/nuget/v/IronSnappy). You are ready to go. 
+Reference the following NuGet package [![Nuget](https://img.shields.io/nuget/v/IronSnappy)](https://www.nuget.org/packages/IronSnappy/). You are ready to go.
 
 To compress a buffer:
 

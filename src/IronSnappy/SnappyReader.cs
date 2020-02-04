@@ -325,7 +325,7 @@ namespace IronSnappy
                   d += length;
                   s += length;
 
-                  break;
+                  continue;
 
                case Snappy.TagCopy1:
                   s += 2;
@@ -334,8 +334,12 @@ namespace IronSnappy
                      // The uint conversions catch overflow from the previous line.
                      return DecodeErrCodeCorrupt;
                   }
-                  length = ((4 + (int)(src[s - 2])) >> 2) & 0x7;
-                  offset = (int)((uint)src[s - 2] & (0xe0 << 3) | (uint)src[s - 1]);
+                  //4 + ((17 >> 2) & 0x7)
+                  length = 4 + ((src[s - 2] >> 2) & 0x7);
+                  //(33 & 0xe0) << 3 | 0
+                  offset = ((src[s - 2] & 0xe0) << 3) | src[s-1];
+                  offset = offset;
+
                   break;
 
                case Snappy.TagCopy2:
@@ -345,8 +349,9 @@ namespace IronSnappy
                      // The uint conversions catch overflow from the previous line.
                      return DecodeErrCodeCorrupt;
                   }
-                  length = (1 + (int)src[s - 3]) >> 2;
-                  offset = (int)((uint)src[s - 2] | ((uint)(src[s - 1]) << 8));
+                  length = 1 + (src[s - 3] >> 2);
+                  offset = (int)(src[s - 2] | ((uint)(src[s - 1]) << 8));
+
                   break;
 
                case Snappy.TagCopy4:
@@ -356,7 +361,7 @@ namespace IronSnappy
                      // The uint conversions catch overflow from the previous line.
                      return DecodeErrCodeCorrupt;
                   }
-                  length = 1 + (int)(src[s - 5]) >> 2;
+                  length = 1 + (src[s - 5] >> 2);
                   offset = (int)((uint)(src[s - 4]) | (uint)(src[s - 3]) << 8 | (uint)(src[s - 2]) << 16 | (uint)(src[s - 1]) << 24);
                   break;
             }
@@ -370,7 +375,7 @@ namespace IronSnappy
             // If no overlap, use the built-in copy:
             if(offset >= length)
             {
-               dst[(d - offset)..].CopyTo(dst[d..(d + length)]);
+               dst[(d - offset)..(d - offset + length)].CopyTo(dst[d..(d + length)]);
 
                d += length;
                continue;
@@ -423,7 +428,8 @@ namespace IronSnappy
 
          }
 
-         switch(DecodeInternal(dst, src[s..]))
+         int r = DecodeInternal(dst, src[s..]);
+         switch(r)
          {
             case 0:
                return dst;

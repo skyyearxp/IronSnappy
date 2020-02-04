@@ -19,6 +19,18 @@ namespace IronSnappy.Test
       }
 
       [Fact]
+      public void DecodeGoldenInput()
+      {
+         byte[] got = Snappy.Decode(File.ReadAllBytes("TestData/Mark.Twain-Tom.Sawyer.rawsnappy.txt"));
+
+         byte[] want = File.ReadAllBytes("TestData/Mark.Twain-Tom.Sawyer.txt");
+
+         Assert.Equal(want.Length, got.Length);
+
+         Assert.Equal(want, got);
+      }
+
+      [Fact]
       public void RoundtripGoldenData()
       {
          byte[] goldenRaw = File.ReadAllBytes("TestData/Mark.Twain-Tom.Sawyer.txt");

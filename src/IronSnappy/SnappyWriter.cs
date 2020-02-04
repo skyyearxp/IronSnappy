@@ -7,33 +7,9 @@ namespace IronSnappy
 {
    class SnappyWriter : Stream
    {
-      private const string MagicBody = "sNaPpY";
-      private const string MagicChunk = "\xff\x06\x00\x00" + MagicBody;
-      private const int MaxBlockSize = 65536;
-      private const int ChecksumSize = 4;
-      private const int ChunkHeaderSize = 4;
-      private const int MaxEncodedLenOfMaxBlockSize = 76490;
-      private const int InputMargin = 16 - 1;
-      private const int MinNonLiteralBlockSize = 1 + 1 + InputMargin;
-
-      private const int TagLiteral = 0x00;
-      private const int TagCopy1 = 0x01;
-      private const int TagCopy2 = 0x02;
-      private const int TagCopy4 = 0x03;
-
-      private const int ChunkTypeCompressedData = 0x00;
-      private const int ChunkTypeUncompressedData = 0x01;
-      private const int ChunkTypePadding = 0xfe;
-      private const int ChunkTypeStreamIdentifier = 0xff;
-
-      private static readonly int ObufHeaderLen = MagicChunk.Length + ChecksumSize + ChunkHeaderSize;
-      private static readonly int ObufLen = ObufHeaderLen + MaxEncodedLenOfMaxBlockSize;
-
       private readonly Stream _parent;
-      private static ArrayPool<byte> BytePool = ArrayPool<byte>.Shared;
-
-      private byte[] _ibuf;
-      private byte[] _obuf;
+      private readonly byte[] _ibuf;
+      private readonly byte[] _obuf;
       private int _ibufIdx;
       private bool _wroteStreamHeader;
 
@@ -41,8 +17,8 @@ namespace IronSnappy
       {
          _parent = parent;
 
-         _ibuf = BytePool.Rent(MaxBlockSize);
-         _obuf = BytePool.Rent(ObufLen);
+         _ibuf = Snappy.BytePool.Rent(Snappy.MaxBlockSize);
+         _obuf = Snappy.BytePool.Rent(Snappy.ObufLen);
       }
 
       public override bool CanRead => false;
@@ -64,9 +40,9 @@ namespace IronSnappy
          _ibufIdx = 0;
       }
 
-      public override int Read(byte[] buffer, int offset, int count) => throw new NotImplementedException();
-      public override long Seek(long offset, SeekOrigin origin) => throw new NotImplementedException();
-      public override void SetLength(long value) => throw new NotImplementedException();
+      public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+      public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+      public override void SetLength(long value) => throw new NotSupportedException();
 
       public override void Write(byte[] buffer, int offset, int count)
       {
@@ -109,8 +85,8 @@ namespace IronSnappy
          }
          finally
          {
-            BytePool.Return(_ibuf);
-            BytePool.Return(_obuf);
+            Snappy.BytePool.Return(_ibuf);
+            Snappy.BytePool.Return(_obuf);
          }
       }
 
@@ -118,20 +94,20 @@ namespace IronSnappy
       {
          while(p.Length > 0)
          {
-            int obufStart = MagicChunk.Length;
+            int obufStart = Snappy.MagicChunk.Length;
 
             if(!_wroteStreamHeader)
             {
                _wroteStreamHeader = true;
-               Encoding.UTF8.GetBytes(MagicChunk).AsSpan().CopyTo(_obuf.AsSpan());
+               Encoding.UTF8.GetBytes(Snappy.MagicChunk).AsSpan().CopyTo(_obuf.AsSpan());
                obufStart = 0;
             }
 
             ReadOnlySpan<byte> uncompressed;
-            if(p.Length > MaxBlockSize)
+            if(p.Length > Snappy.MaxBlockSize)
             {
-               uncompressed = p[..MaxBlockSize];
-               p = p[MaxBlockSize..];
+               uncompressed = p[..Snappy.MaxBlockSize];
+               p = p[Snappy.MaxBlockSize..];
             }
             else
             {
@@ -143,34 +119,34 @@ namespace IronSnappy
 
             // Compress the buffer, discarding the result if the improvement
             // isn't at least 12.5%.
-            ReadOnlySpan<byte> compressed = Encode(_obuf.AsSpan()[ObufHeaderLen..], uncompressed);
-            byte chunkType = (byte)ChunkTypeCompressedData;
+            ReadOnlySpan<byte> compressed = Encode(_obuf.AsSpan()[Snappy.ObufHeaderLen..], uncompressed);
+            byte chunkType = (byte)Snappy.ChunkTypeCompressedData;
             int chunkLen = 4 + compressed.Length;
-            int obufEnd = ObufHeaderLen + compressed.Length;
+            int obufEnd = Snappy.ObufHeaderLen + compressed.Length;
 
             if(compressed.Length >= uncompressed.Length - uncompressed.Length / 8)
             {
-               chunkType = ChunkTypeUncompressedData;
+               chunkType = Snappy.ChunkTypeUncompressedData;
 
                chunkLen = 4 + uncompressed.Length;
 
-               obufEnd = ObufHeaderLen;
+               obufEnd = Snappy.ObufHeaderLen;
 
             }
 
             // Fill in the per-chunk header that comes before the body.
-            _obuf[MagicChunk.Length + 0] = chunkType;
-            _obuf[MagicChunk.Length + 1] = (byte)(chunkLen >> 0);
-            _obuf[MagicChunk.Length + 2] = (byte)(chunkLen >> 8);
-            _obuf[MagicChunk.Length + 3] = (byte)(chunkLen >> 16);
-            _obuf[MagicChunk.Length + 4] = (byte)(checksum >> 0);
-            _obuf[MagicChunk.Length + 5] = (byte)(checksum >> 8);
-            _obuf[MagicChunk.Length + 6] = (byte)(checksum >> 16);
-            _obuf[MagicChunk.Length + 7] = (byte)(checksum >> 24);
+            _obuf[Snappy.MagicChunk.Length + 0] = chunkType;
+            _obuf[Snappy.MagicChunk.Length + 1] = (byte)(chunkLen >> 0);
+            _obuf[Snappy.MagicChunk.Length + 2] = (byte)(chunkLen >> 8);
+            _obuf[Snappy.MagicChunk.Length + 3] = (byte)(chunkLen >> 16);
+            _obuf[Snappy.MagicChunk.Length + 4] = (byte)(checksum >> 0);
+            _obuf[Snappy.MagicChunk.Length + 5] = (byte)(checksum >> 8);
+            _obuf[Snappy.MagicChunk.Length + 6] = (byte)(checksum >> 16);
+            _obuf[Snappy.MagicChunk.Length + 7] = (byte)(checksum >> 24);
 
             _parent.Write(_obuf, obufStart, obufEnd);
 
-            if(chunkType == ChunkTypeUncompressedData)
+            if(chunkType == Snappy.ChunkTypeUncompressedData)
             {
                _parent.Write(uncompressed);
             }
@@ -197,13 +173,13 @@ namespace IronSnappy
             ReadOnlySpan<byte> p = src;
             src = null;
 
-            if(p.Length > MaxBlockSize)
+            if(p.Length > Snappy.MaxBlockSize)
             {
-               p = p[..MaxBlockSize];
-               src = p[MaxBlockSize..];
+               p = p[..Snappy.MaxBlockSize];
+               src = p[Snappy.MaxBlockSize..];
             }
 
-            if(p.Length < MinNonLiteralBlockSize)
+            if(p.Length < Snappy.MinNonLiteralBlockSize)
             {
                d += EmitLiteral(dst[d..], p);
             }
@@ -320,7 +296,7 @@ namespace IronSnappy
          // sLimit is when to stop looking for offset/length copies. The inputMargin
          // lets us use a fast path for emitLiteral in the main loop, while we are
          // looking for copies.
-         int sLimit = src.Length - InputMargin;
+         int sLimit = src.Length - Snappy.InputMargin;
 
          // nextEmit is where in src the next emitLiteral should start from.
          int nextEmit = 0;
@@ -468,7 +444,7 @@ namespace IronSnappy
          while(length >= 68)
          {
             // Emit a length 64 copy, encoded as 3 bytes.
-            dst[i + 0] = 63 << 2 | TagCopy2;
+            dst[i + 0] = 63 << 2 | Snappy.TagCopy2;
             dst[i + 1] = (byte)offset;
 
             dst[i + 2] = (byte)(offset >> 8);
@@ -480,7 +456,7 @@ namespace IronSnappy
          if(length > 64)
          {
             // Emit a length 60 copy, encoded as 3 bytes.
-            dst[i + 0] = 59 << 2 | TagCopy2;
+            dst[i + 0] = 59 << 2 | Snappy.TagCopy2;
             dst[i + 1] = (byte)offset;
 
             dst[i + 2] = (byte)(offset >> 8);
@@ -492,7 +468,7 @@ namespace IronSnappy
          if(length >= 12 || offset >= 2048)
          {
             // Emit the remaining copy, encoded as 3 bytes.
-            dst[i + 0] = (byte)((ushort)(length - 1) << 2 | TagCopy2);
+            dst[i + 0] = (byte)((ushort)(length - 1) << 2 | Snappy.TagCopy2);
             dst[i + 1] = (byte)offset;
 
             dst[i + 2] = (byte)(offset >> 8);
@@ -500,7 +476,7 @@ namespace IronSnappy
          }
 
          // Emit the remaining copy, encoded as 2 bytes.
-         dst[i + 0] = (byte)((uint)(offset >> 8) << 5 | (uint)(length - 4) << 2 | TagCopy1);
+         dst[i + 0] = (byte)((uint)(offset >> 8) << 5 | (uint)(length - 4) << 2 | Snappy.TagCopy1);
          dst[i + 1] = (byte)offset;
          return i + 2;
       }
@@ -517,20 +493,20 @@ namespace IronSnappy
 
          if(n < 60)
          {
-            dst[0] = (byte)((n << 2) | TagLiteral);
+            dst[0] = (byte)((n << 2) | Snappy.TagLiteral);
             i = 1;
          }
          else if(n < 1 << 8)
          {
 
-            dst[0] = 60 << 2 | TagLiteral;
+            dst[0] = 60 << 2 | Snappy.TagLiteral;
 
             dst[1] = (byte)n;
             i = 2;
          }
          else
          {
-            dst[0] = 61 << 2 | TagLiteral;
+            dst[0] = 61 << 2 | Snappy.TagLiteral;
             dst[1] = (byte)n;
 
             dst[2] = (byte)(n >> 8);

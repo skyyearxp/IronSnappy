@@ -23,6 +23,7 @@ namespace IronSnappy.Test
       {
          byte[] goldenRaw = File.ReadAllBytes("TestData/Mark.Twain-Tom.Sawyer.txt");
          byte[] compressed = Snappy.Encode(goldenRaw);
+         byte[] uncompressed = Snappy.Decode(compressed);
       }
    }
 }

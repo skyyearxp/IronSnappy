@@ -46,7 +46,7 @@ stages:
       inputs:
         command: test
         projects: ./src/Snappy.sln
-        arguments: '-c release'
+        arguments: '-c release /p:Version=$(v.prefix).$(v.rev)'
 
     - task: CopyFiles@2
       displayName: 'copy generated nugets'

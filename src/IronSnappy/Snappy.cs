@@ -35,6 +35,11 @@ namespace IronSnappy
          return new SnappyWriter(destination);
       }
 
+      public static Stream OpenReader(Stream source)
+      {
+         return new SnappyReader(source);
+      }
+
       public static byte[] Encode(ReadOnlySpan<byte> src)
       {
          int maxLen = SnappyWriter.GetMaxEncodedLen(src.Length);

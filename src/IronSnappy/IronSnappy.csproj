@@ -7,6 +7,20 @@
       <PackageIcon>icon.png</PackageIcon>
       <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
       <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+      <Version>1.0.0</Version>
+      <Description>This is a native .NET port of [Google Snappy](https://github.com/google/snappy) compression/decompression library. The only implementation that is stable, fast, up to date with latest Snappy improvements, and most importantly *does not depend on native Snappy binaries*. 
+
+It is originally ported from the [Golang implementation](https://github.com/golang/snappy/) because Go is much easier to understand and work with comparing to C++.
+
+The library passes *golden tests* from the original implementation i.e. compares that compression/decompression is fully compatible with the original implementation.
+
+Internally, it is using array pooling and spans for efficient memory allocation and low GC pressure.</Description>
+      <PackageProjectUrl>https://github.com/aloneguid/IronSnappy</PackageProjectUrl>
+      <RepositoryUrl>https://github.com/aloneguid/IronSnappy</RepositoryUrl>
+      <RepositoryType>Git</RepositoryType>
+      <PackageTags>google snappy compression dotnet c#</PackageTags>
+      <PackageReleaseNotes>see release history - https://github.com/aloneguid/IronSnappy/releases</PackageReleaseNotes>
+      <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
    </PropertyGroup>
 
    <ItemGroup>

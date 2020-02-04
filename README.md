@@ -1,6 +1,8 @@
-# IronSnappy
+# IronSnappy ![Nuget](https://img.shields.io/nuget/v/IronSnappy)
 
-This is a native .NET port of [Google Snappy](https://github.com/google/snappy) compression/decompression library. The only implementation that is stable, fast, up to date with latest Snappy improvements, and most importantly *does not depend on native Snappy binaries*. 
+<img src="src/IronSnappy/icon.png" width=80 height=80 align="left"/>
+
+This is a native .NET port of [Google Snappy](https://github.com/google/snappy) compression/decompression library. The only implementation that is stable, fast, up to date with latest Snappy improvements, and most importantly *does not depend on native Snappy binaries*. Works on Windows, Linux, MacOSX, ARM and so on.
 
 It is originally ported from the [Golang implementation](https://github.com/golang/snappy/) because Go is much easier to understand and work with comparing to C++.
 
@@ -10,9 +12,31 @@ Internally, it is using array pooling and spans for efficient memory allocation 
 
 ## Using
 
-Reference the following 
+Reference the following NuGet package ![Nuget](https://img.shields.io/nuget/v/IronSnappy). You are ready to go. 
+
+To compress a buffer:
+
+```csharp
+using IronSnappy;
+
+byte[] input = File.ReadAllBytes("TestData/Mark.Twain-Tom.Sawyer.txt");
+byte[] compressed = Snappy.Encode(input);
+```
+
+To decompress a buffer:
+
+```csharp
+using IronSnappy;
+
+byte[] input = File.ReadAllBytes("TestData/Mark.Twain-Tom.Sawyer.rawsnappy.txt")
+byte[] uncompressed = Snappy.Decode(input);
+```
 
 
+
+### Streaming Format
+
+Streams are fully supported. To decompress use `Snappy.OpenReader(Stream)` and to compress `Snappy.OpenWriter(Stream)`. Don't forget to flush 🚽 and dispose 🧻!
 
 ## Contributing
 

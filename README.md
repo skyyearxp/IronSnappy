@@ -1,4 +1,4 @@
-# IronSnappy ![Nuget](https://img.shields.io/nuget/v/IronSnappy)
+# IronSnappy
 
 <img src="src/IronSnappy/icon.png" width=80 height=80 align="left"/>
 

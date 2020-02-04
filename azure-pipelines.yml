@@ -20,8 +20,7 @@ pr:
       - doc/**/*
 
 variables:
-  - name: vmImage
-    value: 'ubuntu-latest'
+  vmImage: 'ubuntu-latest'
 
 stages:
 - stage: Build

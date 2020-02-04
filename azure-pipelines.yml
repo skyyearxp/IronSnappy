@@ -20,8 +20,8 @@ pr:
       - doc/**/*
 
 variables:
-  v.majorMinor: '1.0'
-  v.revision: $[counter(variables['v.majorMinor'], 0)]
+  v.prefix: '0.0'
+  v.rev: $[counter(variables['v.rev'], 0)]
   vmImage: 'ubuntu-latest'
 
 stages:
@@ -39,7 +39,7 @@ stages:
       inputs:
         command: 'build'
         projects: 'src/Snappy.sln'
-        arguments: '-c release /p:Version=$(v.majorMinor).$(v.revision)'
+        arguments: '-c release /p:Version=$(v.prefix).$(v.rev)'
 
     - task: DotNetCoreCLI@2
       displayName: 'run tests'

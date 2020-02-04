@@ -37,8 +37,9 @@ stages:
     - task: DotNetCoreCLI@2
       displayName: 'build all'
       inputs:
-        projects: src/Snappy.sln
-        arguments: '-c release'
+        command: 'build'
+        projects: 'src/Snappy.sln'
+        arguments: '-c release /p:Version=$(v.majorMinor).$(v.revision)'
 
     - task: DotNetCoreCLI@2
       displayName: 'run tests'

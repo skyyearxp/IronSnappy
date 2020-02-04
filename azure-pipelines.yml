@@ -20,8 +20,7 @@ pr:
       - doc/**/*
 
 variables:
-  v.prefix: '1.0'
-  v.rev: $[counter(variables['v.rev'], 0)]
+  v.prefix: '1.0.0'
   vmImage: 'ubuntu-latest'
 
 stages:
@@ -34,21 +33,21 @@ stages:
 
     steps:
 
-    - script: echo "##vso[build.updatebuildnumber]$(v.prefix).$(v.rev)"
+    - script: echo "##vso[build.updatebuildnumber]$(v.prefix)"
 
     - task: DotNetCoreCLI@2
       displayName: 'build all'
       inputs:
         command: 'build'
         projects: 'src/Snappy.sln'
-        arguments: '-c release /p:Version=$(v.prefix).$(v.rev)'
+        arguments: '-c release /p:Version=$(v.prefix)'
 
     - task: DotNetCoreCLI@2
       displayName: 'run tests'
       inputs:
         command: test
         projects: ./src/Snappy.sln
-        arguments: '-c release /p:Version=$(v.prefix).$(v.rev)'
+        arguments: '-c release /p:Version=$(v.prefix)'
 
     - task: CopyFiles@2
       displayName: 'copy generated nugets'

@@ -177,7 +177,7 @@ namespace IronSnappy
          }
       }
 
-      ReadOnlySpan<byte> Encode(Span<byte> dst, ReadOnlySpan<byte> src)
+      public static ReadOnlySpan<byte> Encode(Span<byte> dst, ReadOnlySpan<byte> src)
       {
          int n = GetMaxEncodedLen(src.Length);
          if(n < 0)
@@ -216,7 +216,7 @@ namespace IronSnappy
          return dst[..d];
       }
 
-      private static int GetMaxEncodedLen(int srcLen)
+      public static int GetMaxEncodedLen(int srcLen)
       {
          uint n = (uint)srcLen;
 	      if(n > 0xffffffff)
@@ -253,7 +253,7 @@ namespace IronSnappy
 
       // PutUvarint encodes a uint64 into buf and returns the number of bytes written.
       // If the buffer is too small, PutUvarint will panic.
-      int PutUvarint(Span<byte> buf, ulong x)
+      static int PutUvarint(Span<byte> buf, ulong x)
       {
          int i = 0;
          while(x >= 0x80)
@@ -291,7 +291,7 @@ namespace IronSnappy
       // It also assumes that:
       //	len(dst) >= MaxEncodedLen(len(src)) &&
       // 	minNonLiteralBlockSize <= len(src) && len(src) <= maxBlockSize
-      int EncodeBlock(Span<byte> dst, ReadOnlySpan<byte> src)
+      static int EncodeBlock(Span<byte> dst, ReadOnlySpan<byte> src)
       {
          int d = 0;
 

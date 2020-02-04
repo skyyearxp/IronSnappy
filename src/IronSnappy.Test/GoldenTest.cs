@@ -7,24 +7,22 @@ namespace IronSnappy.Test
    public class GoldenTest
    {
       [Fact]
-      public void CompressGoldenData()
+      public void EncodeGoldenInput()
       {
-         //compress
-         var ms = new MemoryStream();
-         using(Stream w = Snappy.OpenWriter(ms))
-         {
-            using(FileStream src = File.OpenRead("TestData/Mark.Twain-Tom.Sawyer.txt"))
-            {
-               src.CopyTo(w);
-            }
-         }
-         byte[] compressedByMe = ms.ToArray();
+         byte[] got = Snappy.Encode(File.ReadAllBytes("TestData/Mark.Twain-Tom.Sawyer.txt"));
 
-         byte[] goldenCompressed = File.ReadAllBytes("TestData/Mark.Twain-Tom.Sawyer.rawsnappy.txt");
+         byte[] want = File.ReadAllBytes("TestData/Mark.Twain-Tom.Sawyer.rawsnappy.txt");
 
-         Assert.Equal(goldenCompressed.Length, compressedByMe.Length);
+         Assert.Equal(want.Length, got.Length);
 
-         Assert.Equal(goldenCompressed, compressedByMe);
+         Assert.Equal(want, got);
+      }
+
+      [Fact]
+      public void RoundtripGoldenData()
+      {
+         byte[] goldenRaw = File.ReadAllBytes("TestData/Mark.Twain-Tom.Sawyer.txt");
+         byte[] compressed = Snappy.Encode(goldenRaw);
       }
    }
 }

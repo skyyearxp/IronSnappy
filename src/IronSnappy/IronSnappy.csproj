@@ -1,13 +1,20 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <OutputType>Exe</OutputType>
-    <TargetFramework>netstandard2.1</TargetFramework>
-     <LangVersion>latest</LangVersion>
-  </PropertyGroup>
+   <PropertyGroup>
+      <TargetFramework>netstandard2.1</TargetFramework>
+      <LangVersion>latest</LangVersion>
+      <PackageIconUrl></PackageIconUrl>
+      <PackageIcon>icon.png</PackageIcon>
+      <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+      <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+   </PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="System.Memory" Version="4.5.3" />
-  </ItemGroup>
+   <ItemGroup>
+      <PackageReference Include="System.Memory" Version="4.5.3" />
+   </ItemGroup>
+
+   <ItemGroup>
+     <None Include="icon.png" Pack="true" PackagePath="" />
+   </ItemGroup>
 
 </Project>

@@ -20,7 +20,7 @@ pr:
       - doc/**/*
 
 variables:
-  v.prefix: '0.0'
+  v.prefix: '1.0'
   v.rev: $[counter(variables['v.rev'], 0)]
   vmImage: 'ubuntu-latest'
 

@@ -20,6 +20,8 @@ pr:
       - doc/**/*
 
 variables:
+  v.majorMinor: '1.0'
+  v.revision: $[counter(variables['v.majorMinor'], 0)]
   vmImage: 'ubuntu-latest'
 
 stages:

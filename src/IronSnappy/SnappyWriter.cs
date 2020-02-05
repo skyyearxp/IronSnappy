@@ -36,7 +36,7 @@ namespace IronSnappy
          if(_ibufIdx == 0)
             return;
 
-         WriteChunk(_ibuf.AsSpan(.._ibufIdx));
+         WriteChunk(_ibuf.AsSpan(0, _ibufIdx));
          _ibufIdx = 0;
       }
 
@@ -62,18 +62,18 @@ namespace IronSnappy
             {
                //append to ibuf what we can
                copyMax = _ibuf.Length - _ibufIdx;
-               src[..copyMax].CopyTo(_ibuf.AsSpan(_ibufIdx..));
+               src.Slice(0, copyMax).CopyTo(_ibuf.AsSpan(_ibufIdx));
                _ibufIdx += copyMax;
 
                Flush();
             }
 
-            src = src[copyMax..];
+            src = src.Slice(copyMax);
          }
 
          //copy remaining data
          int copyMaxLeft = Math.Min(_ibuf.Length - _ibufIdx, src.Length);
-         src[..copyMaxLeft].CopyTo(_ibuf.AsSpan(_ibufIdx..));
+         src.Slice(0, copyMaxLeft).CopyTo(_ibuf.AsSpan(_ibufIdx));
          _ibufIdx += copyMaxLeft;
       }
 
@@ -106,8 +106,8 @@ namespace IronSnappy
             ReadOnlySpan<byte> uncompressed;
             if(p.Length > Snappy.MaxBlockSize)
             {
-               uncompressed = p[..Snappy.MaxBlockSize];
-               p = p[Snappy.MaxBlockSize..];
+               uncompressed = p.Slice(0, Snappy.MaxBlockSize);
+               p = p.Slice(Snappy.MaxBlockSize);
             }
             else
             {
@@ -119,7 +119,7 @@ namespace IronSnappy
 
             // Compress the buffer, discarding the result if the improvement
             // isn't at least 12.5%.
-            ReadOnlySpan<byte> compressed = Encode(_obuf.AsSpan()[Snappy.ObufHeaderLen..], uncompressed);
+            ReadOnlySpan<byte> compressed = Encode(_obuf.AsSpan(Snappy.ObufHeaderLen), uncompressed);
             byte chunkType = (byte)Snappy.ChunkTypeCompressedData;
             int chunkLen = 4 + compressed.Length;
             int obufEnd = Snappy.ObufHeaderLen + compressed.Length;
@@ -148,7 +148,7 @@ namespace IronSnappy
 
             if(chunkType == Snappy.ChunkTypeUncompressedData)
             {
-               _parent.Write(uncompressed);
+               Spans.Write(_parent, compressed);
             }
          }
       }
@@ -175,21 +175,21 @@ namespace IronSnappy
 
             if(p.Length > Snappy.MaxBlockSize)
             {
-               p = p[..Snappy.MaxBlockSize];
-               src = p[Snappy.MaxBlockSize..];
+               p = p.Slice(0, Snappy.MaxBlockSize);
+               src = p.Slice(Snappy.MaxBlockSize);
             }
 
             if(p.Length < Snappy.MinNonLiteralBlockSize)
             {
-               d += EmitLiteral(dst[d..], p);
+               d += EmitLiteral(dst.Slice(d), p);
             }
             else
             {
-               d += EncodeBlock(dst[d..], p);
+               d += EncodeBlock(dst.Slice(d), p);
             }
          }
 
-         return dst[..d];
+         return dst.Slice(0, d);
       }
 
       public static int GetMaxEncodedLen(int srcLen)
@@ -244,13 +244,13 @@ namespace IronSnappy
 
       static uint Load32(ReadOnlySpan<byte> b, int i)
       {
-         b = b[i..(i + 4)]; // Help the compiler eliminate bounds checks on the next line.
+         b = b.Slice(i, 4); // Help the compiler eliminate bounds checks on the next line.
          return (uint)(b[0]) | ((uint)(b[1]) << 8) | ((uint)(b[2]) << 16) | ((uint)(b[3]) << 24);
       }
 
       static ulong Load64(ReadOnlySpan<byte> b, int i)
       {
-         b = b[i..(i + 8)]; // Help the compiler eliminate bounds checks on the next line.
+         b = b.Slice(i, 8); // Help the compiler eliminate bounds checks on the next line.
          return (ulong)(b[0]) | (ulong)(b[1]) << 8 | (ulong)(b[2]) << 16 | (ulong)(b[3]) << 24 |
             (ulong)(b[4]) << 32 | (ulong)(b[5]) << 40 | (ulong)(b[6]) << 48 | (ulong)(b[7]) << 56;
       }
@@ -352,7 +352,7 @@ namespace IronSnappy
             // A 4-byte match has been found. We'll later see if more than 4 bytes
             // match. But, prior to the match, src[nextEmit:s] are unmatched. Emit
             // them as literal bytes.
-            d += EmitLiteral(dst[d..], src[nextEmit..s]);
+            d += EmitLiteral(dst.Slice(d), src.Slice(nextEmit, s - nextEmit));
 
             // Call emitCopy, and then see if another emitCopy could be our next
             // move. Repeat until we find no match for the input immediately after
@@ -379,7 +379,7 @@ namespace IronSnappy
                   s = s + 1;
                }
 
-               d += EmitCopy(dst[d..], base1 - candidate, s - base1);
+               d += EmitCopy(dst.Slice(d), base1 - candidate, s - base1);
 
                nextEmit = s;
                if(s >= sLimit)
@@ -416,7 +416,7 @@ namespace IronSnappy
          emitRemainder:
          if(nextEmit < src.Length)
          {
-            d += EmitLiteral(dst[d..], src[nextEmit..]);
+            d += EmitLiteral(dst.Slice(d), src.Slice(nextEmit));
          }
          return d;
 
@@ -514,7 +514,7 @@ namespace IronSnappy
             i = 3;
          }
 
-         lit.CopyTo(dst[i..]);
+         lit.CopyTo(dst.Slice(i));
          return i + lit.Length;
       }
    }

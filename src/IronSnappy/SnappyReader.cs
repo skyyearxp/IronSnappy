@@ -18,8 +18,8 @@ namespace IronSnappy
       private int _i;
       private int _j;
       private bool _readHeader;
-      private byte[] _buf;
-      private byte[] _decoded;
+      private readonly byte[] _buf;
+      private readonly byte[] _decoded;
 
       public SnappyReader(Stream parent)
       {
@@ -49,7 +49,7 @@ namespace IronSnappy
                throw new NotImplementedException();
             }
 
-            if(4 != _parent.Read(_buf.AsSpan()[..4]))
+            if(4 != _parent.Read(_buf, 0, 4))
             {
                throw new IOException("corrupt input");
             }
@@ -81,17 +81,16 @@ namespace IronSnappy
                   {
                      throw new IOException(ErrCorrupt);
                   }
-                  Span<byte> buf = _buf.AsSpan()[..chunkLen];
+                  Span<byte> buf = _buf.AsSpan().Slice(0, chunkLen);
 
-                  if(chunkLen != _parent.Read(buf))
+                  if(chunkLen != Spans.Read(_parent, buf))
                   {
                      throw new IOException(ErrCorrupt);
                   }
 
                   uint checksum = (uint)(buf[0]) | ((uint)(buf[1]) << 8) | ((uint)(buf[2]) << 16) | ((uint)(buf[3]) << 24);
 
-                  buf = buf[Snappy.ChecksumSize..];
-
+                  buf = buf.Slice(Snappy.ChecksumSize);
 
                   int n = DecodedLen(buf);
                   if(n > _decoded.Length)
@@ -101,7 +100,7 @@ namespace IronSnappy
 
                   Decode(_decoded, buf);
 
-                  if(Crc32.Compute(_decoded[..n]) != checksum)
+                  if(Crc32.Compute(_decoded.AsSpan(0, n)) != checksum)
                   {
                      throw new IOException(ErrCorrupt);
                   }
@@ -121,9 +120,9 @@ namespace IronSnappy
                      throw new IOException(ErrCorrupt);
                   }
 
-                  Span<byte> buf = _buf.AsSpan()[..Snappy.ChecksumSize];
+                  Span<byte> buf = _buf.AsSpan(0, Snappy.ChecksumSize);
 
-                  _parent.Read(buf);
+                  Spans.Read(_parent, buf);
 
                   uint checksum = (uint)(buf[0]) | (uint)(buf[1]) << 8 | (uint)(buf[2]) << 16 | (uint)(buf[3]) << 24;
                   // Read directly into r.decoded instead of via r.buf.
@@ -134,9 +133,9 @@ namespace IronSnappy
                      throw new IOException(ErrCorrupt);
                   }
 
-                  _parent.Read(_decoded[..n]);
+                  Spans.Read(_parent, _decoded.AsSpan(0, n));
 
-                  if(Crc32.Compute(_decoded[..n]) != checksum)
+                  if(Crc32.Compute(_decoded.AsSpan(0, n)) != checksum)
                   {
                      throw new IOException(ErrCorrupt);
                   }
@@ -154,7 +153,7 @@ namespace IronSnappy
                      throw new IOException(ErrCorrupt);
                   }
 
-                  _parent.Read(_buf.AsSpan()[..Snappy.MagicBody.Length]);
+                  Spans.Read(_parent, _buf.AsSpan(0, Snappy.MagicBody.Length));
 
                   for(int i = 0; i < Snappy.MagicBody.Length; i++)
                   {
@@ -176,7 +175,7 @@ namespace IronSnappy
 
             // Section 4.4 Padding (chunk type 0xfe).
             // Section 4.6. Reserved skippable chunks (chunk types 0x80-0xfd).
-            _parent.Read(_buf.AsSpan()[..chunkLen]);
+            Spans.Read(_parent, _buf.AsSpan(0, chunkLen));
          }
       }
 
@@ -320,7 +319,7 @@ namespace IronSnappy
                      return DecodeErrCodeCorrupt;
                   }
 
-                  src[s..(s + length)].CopyTo(dst[d..]);
+                  src.Slice(s, length).CopyTo(dst.Slice(d));
 
                   d += length;
                   s += length;
@@ -338,7 +337,6 @@ namespace IronSnappy
                   length = 4 + ((src[s - 2] >> 2) & 0x7);
                   //(33 & 0xe0) << 3 | 0
                   offset = ((src[s - 2] & 0xe0) << 3) | src[s-1];
-                  offset = offset;
 
                   break;
 
@@ -375,7 +373,7 @@ namespace IronSnappy
             // If no overlap, use the built-in copy:
             if(offset >= length)
             {
-               dst[(d - offset)..(d - offset + length)].CopyTo(dst[d..(d + length)]);
+               dst.Slice(d - offset, length).CopyTo(dst.Slice(d, length));
 
                d += length;
                continue;
@@ -388,9 +386,9 @@ namespace IronSnappy
             //
             // We align the slices into a and b and show the compiler they are the same size.
             // This allows the loop to run without bounds checks.
-            Span<byte> a = dst[d..(d + length)];
-            Span<byte> b = dst[(d - offset)..];
-            b = b[..a.Length];
+            Span<byte> a = dst.Slice(d, length);
+            Span<byte> b = dst.Slice(d - offset);
+            b = b.Slice(0, a.Length);
             for(int i = 0; i < a.Length; i++)
             {
                a[i] = b[i];
@@ -419,7 +417,7 @@ namespace IronSnappy
 
          if(dLen <= dst.Length)
          {
-            dst = dst[..dLen];
+            dst = dst.Slice(0, dLen);
 
          }
          else
@@ -428,7 +426,7 @@ namespace IronSnappy
 
          }
 
-         int r = DecodeInternal(dst, src[s..]);
+         int r = DecodeInternal(dst, src.Slice(s));
          switch(r)
          {
             case 0:

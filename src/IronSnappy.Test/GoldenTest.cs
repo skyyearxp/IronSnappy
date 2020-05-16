@@ -40,5 +40,20 @@ namespace IronSnappy.Test
          Assert.Equal(goldenRaw.Length, uncompressed.Length);
          Assert.Equal(goldenRaw, uncompressed);
       }
+
+      [Fact]
+      public void RoundtripEncodeBytes()
+      {
+         byte[] bytes = File.ReadAllBytes("TestData/Mark.Shanghai-skyyearxp.bytes");
+         byte[] wants = File.ReadAllBytes("TestData/Mark.Shanghai-skyyearxp.snappy.bytes");
+
+         byte[] compressed = Snappy.Encode(bytes);
+         Assert.Equal(wants.Length, compressed.Length);
+         Assert.Equal(wants, compressed);
+
+         byte[] uncompressed = Snappy.Decode(compressed);
+         Assert.Equal(bytes.Length, uncompressed.Length);
+         Assert.Equal(bytes, uncompressed);
+      }
    }
 }

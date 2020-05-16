@@ -172,12 +172,15 @@ namespace IronSnappy
          while(src.Length > 0)
          {
             ReadOnlySpan<byte> p = src;
-            src = null;
 
             if(p.Length > Snappy.MaxBlockSize)
             {
-               p = p.Slice(0, Snappy.MaxBlockSize);
-               src = p.Slice(Snappy.MaxBlockSize);
+               p = src.Slice(0, Snappy.MaxBlockSize);
+               src = src.Slice(Snappy.MaxBlockSize);
+            }
+            else
+            {
+               src = null;
             }
 
             if(p.Length < Snappy.MinNonLiteralBlockSize)
